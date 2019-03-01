@@ -1,0 +1,639 @@
+---
+title: "Project 1 & 2"
+author: "Shurong Tian(sxt151030), Pratik Patel(pnp180002), Vishal Shah(vjs180000)"
+date: "December 1st, 2018"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+# Introduction
+**Ethereum** is a decentralized, self-contained software platform that provides smart contracts based on blockchain technology and cryptocurrency concepts. It is a virtual machine that records every transaction between users. Smart contracts are self-executing contracts that are written into code in terms of agreement between buyers and sellers. Compare to the Bitcoin that most people are known of, Ethereum allows users to create any decentralized application over a peer-to-peer network whereas Bitcoin tracks ownership of Bitcoins. Vitalik Buterin, a programmer from Toronto, came up with the idea of Ethereum. 
+
+**ERC-20** tokens are the current industry standard tokens used with smart contracts on the Ethereum platform. ERC-20 stands for Ethereum Request for Comments 20. The Ethereum community created standards for ERC-20 tokens so that they can be shared, transferred, and exchanged.
+
+For this project, we choose **MCAP** (networkmcapTX) as Our primary token. MCAP was created by Bitcoin Growth Fund (BGF) as a mining and ICO fund token. MCAP token uses the counterparty protocol for peer-to-peer transactions. Market cap of MCAP is $84,707 USD (source:coinmarketcap.com). 
+
+The packages we are using in this project:
+
+1.	**fitdistrplus**
+    •	fitdistrplus: Help to Fit of a Parametric Distribution to Non-Censored or Censored Data. The two main functions are fitdist for fit on non-censored data and fitdistcens for fit on censored data.
+    •	extends fitdist() function that we have used to find which distribution fits best with our data.
+    •	Extends qqcomp() that we have used to plots theoretical quantiles against empirical ones.
+    
+2.	**formatR**
+    •	Formate R code automatically
+    •	Spaces and indent will be added to the code automatically, and comments will be preserved under certain conditions, so that R code will be more human-readable.
+    •	We used format() function to chabge the formation of date.
+
+3.	**Data.table**
+    •	data.table inherits from data.frame. It offers fast subset, fast grouping, fast update, fast ordered joins and list columns in a short and flexible syntax, for faster development.
+    •	It extends data.table() function that we have used to count the frequencies of buyer and seller for their transaction and mapping in other tokens.
+
+
+## Question 1
+We will be estimating distribution parameters and looking for a best-fitted distribution of how many times a user buys and sells a token. 
+
+```{r}
+# import the data
+networkmcapTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkmcapTX.txt", quote="\"", comment.char="")
+mcap <- read.delim("F:/UTD/stats/Ethereum Dataset/tokenprice/mcap")
+# change colomn names
+colnames(networkmcapTX) <-c("fromNodeID","toNodeID","unixTime","tokenAmount")
+attach(networkmcapTX)
+attach(mcap)
+```
+
+
+The outliers of our data are the ones that are bigger than the total amount of the token, which is 10^16. To find the outliers, we simply created a subset for the values that are greater than 10^16. We found two transactions that are outliers. 
+
+
+### Preprocessing
+```{r}
+# total amount of the token is total supply(a) times decimals(b)
+a <- 10^8
+b <- 10^8
+totalAmount <- a*b
+message("Total amount of the token is: ", totalAmount)
+outliers <- subset(networkmcapTX,networkmcapTX$tokenAmount > totalAmount)
+outliers
+# remove the outliers
+networkmcapT <- subset(networkmcapTX,networkmcapTX$tokenAmount <= totalAmount)
+```
+
+
+After filtering out the outliers, we looked at how many times a user buys and sells a token and found the numbers of buys/sells with corresponding numbers of users. We plotted the data with buys/sells counts being x-axis and user counts being y-axis. 
+
+**Assumption** - By looking at our data, we assume that our data is going to give us an exponential distribution - most likely a gamma distribution.
+
+##Find Distribution for Sells
+```{r include=FALSE}
+# Load necessary library
+library(data.table)
+library(fitdistrplus)
+```
+
+```{r}
+#Find Distribution - Sells
+f<-as.vector(table(networkmcapT$fromNodeID))
+user <- as.vector(unique(networkmcapT$fromNodeID))
+user <- sort(user)
+tab <- data.frame(user,f)
+d <- data.table(from=c(tab$user),x=c(tab$f))
+counts<- d[,.(rowCount= .N), by=x]
+counts <- counts[order(counts$x),]
+
+
+# Plotting data of sells
+barplot(counts$rowCount,names.arg =counts$x ,ylab = "Freq_sell_count", xlab = "Sell_count", xlim = c(0,20),ylim = c(0,70000))
+```
+
+### Distribution Fitting
+```{r}
+poisfit  <-  fitdist(counts$rowCount, "pois")
+gammafit <- fitdist(counts$rowCount, "gamma", method = "mle", lower = c(0, 0), start = list(scale = 1, shape = 1))
+weibullfit  <-  fitdist(counts$rowCount, "weibull")
+
+qqcomp(list(poisfit, gammafit, weibullfit),
+       legendtext=c("pois", "gamma", "weibull") )
+
+gammafit
+plot(gammafit)
+```
+#### After comparing different distribution fitting, Distribution of Sells data is best fits with "gamma" Distribution
+
+##Find Distribution for Buys
+```{r}
+f <- as.vector(table(networkmcapT$toNodeID))
+user <- as.vector(unique(networkmcapT$toNodeID))
+user <- sort(user)
+tab <- data.frame(user,f)
+d <- data.table(from=c(tab$user),x=c(tab$f))
+counts<- d[,.(rowCount= .N), by=x]
+counts <- counts[order(counts$x),]
+
+# Plotting data of buys
+barplot(counts$rowCount,names.arg =counts$x ,ylab = "Freq_buy_count", xlab = "buy_count", xlim = c(0,20),ylim = c(0,70000))
+```
+
+### Distribution Fitting
+```{r}
+poisfit  <-  fitdist(counts$rowCount, "pois")
+gammafit <- fitdist(counts$rowCount, "gamma", method = "mle", lower = c(0, 0), start = list(scale = 1, shape = 1))
+weibullfit  <-  fitdist(counts$rowCount, "weibull")
+
+qqcomp(list(poisfit, gammafit, weibullfit),
+       legendtext=c("pois", "gamma", "weibull") )
+
+gammafit
+plot(gammafit)
+```
+**After plotting and observing different distributions of discrete data for sell and buy, we have come to a conclusion that the gamma distribution fits best with the data for the token MCAP, which means that our assumption was correct.**
+
+
+
+## Question 2
+We will be creating layers of transactions to find the correlation of price data with each of the layers. 
+
+```{r}
+# Creating table with columns tokenamount and unixtime
+table_of_amount <- subset(networkmcapT,select = c(unixTime,tokenAmount))
+# Creating table with token daily closing price and date
+dates <- mcap$Date
+Date <- as.Date(dates, format = "%m/%d/%Y")
+Date <- format(Date,"%Y-%m-%d")
+Date <- as.Date(Date)
+tablePrice <- data.table(Date,mcap$Close)
+colnames(tablePrice) <-c("Date","Closing Price")
+
+
+# Maping number of transaction with date
+date <- as.Date(as.POSIXct(table_of_amount$unixTime , origin="1970-01-01"))
+amount <- as.vector(table_of_amount$tokenAmount)
+data <- data.frame(date,amount)
+p <- data.table(from=c(data$amount),Date=c(data$date))
+table_of_date<- p[,.(rowCount= .N), by=Date]
+colnames(table_of_date) <-c("Date","Num of Transactions")
+
+
+# Merging both table on Date column
+table_of_date_transaction <- merge(table_of_date,tablePrice,by="Date")
+table_of_date_transaction
+
+```
+
+
+
+```{r}
+# Creating 35 layers based on Dates and calculating correlation for each layer
+p <- 1
+nr <- 0
+pr <- 0
+ncr <- 0
+pcr <- 0
+for (x in 0:34){
+    layer <- subset(table_of_date_transaction,
+                    table_of_date_transaction$Date >
+                      table_of_date_transaction$Date[p] 
+                    & table_of_date_transaction$Date <
+                      table_of_date_transaction$Date[p + 5])
+  
+  cr <- cor(layer$`Num of Transactions`,layer$`Closing Price`)
+  
+  if(cr < 0){
+   nr <- nr + cr
+   ncr <- ncr+1
+  }
+  
+  else{
+    pr <- pr + cr
+    pcr <- pcr+1
+  }
+  
+  p <- p + 5
+}
+
+avg_negative_correlation <- nr/ncr
+avg_positive_correlation <- pr/pcr
+```
+
+
+We are using "dates" to create layers.
+Reason for using this approach:
+
+#### We used different methods like creating layers using tokenamount(  0.01?maxtokenamount) and number of transaction but as our data does not follow any pattern or send signals thess approach are not feasible
+
+#### Still creating layers using dates we got various correlation both positive and neagative but these are best among all other approaches.
+
+###here is average positive and neagative correlation
+```{r}
+# Correlations
+
+avg_positive_correlation
+avg_negative_correlation
+```
+
+#### According to Pearson correlation, the correlation coefficient is between -1 and 1. A good correlation coefficient should be 0.7 or higher. By looking at our correlation for each layer, there are some layers with high correlations. For example, layer 0 has around 0.93 correlation and layer 3 has around -0.96 correlation. But our overall average is not as close. 1/3 of the layers' data don't follow the pattern so that they have very low correlations.
+
+
+## Question 3
+We will find the most active buyers and sellers in our primary token and track them in other tokens. Then, we will find a distribution for the number of unique tokens they invest in. 
+
+```{r}
+#Creaating table of active buyers using frequency greater than Mean of frequencies of transaction for buyers
+p <- data.table(from=c(networkmcapT$fromNodeID),buyers=networkmcapT$fromNodeID)
+table_of_buyers<- p[,.(rowCount= .N), by=buyers]
+table_of_buyers <- table_of_buyers[order(-table_of_buyers$rowCount),]
+Active_buyers <- subset(table_of_buyers,table_of_buyers$rowCount > mean(table_of_buyers$rowCount),select = buyers)
+
+#Creaating table of active sellers using frequency greater than Mean of frequencies of transaction for sellers
+p <- data.table(from=c(networkmcapT$toNodeID),sellers=networkmcapT$toNodeID)
+table_of_sellers<- p[,.(rowCount= .N), by=sellers]
+table_of_sellers <- table_of_sellers[order(-table_of_sellers$rowCount),]
+
+Active_sellers <- subset(table_of_sellers,table_of_sellers$rowCount > mean(table_of_sellers$rowCount),select = sellers)
+
+
+#importing different tokens and change the column names for the table
+#to track buyers and sellers in other tokens, we simply merged buyers column in Active-buyers and networkaragonTX
+
+networkaragonTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkaragonTX.txt", quote="\"", comment.char="")
+colnames(networkaragonTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkaragonTX <- merge(Active_buyers,networkaragonTX,by="buyers")
+sellers_networkaragonTX <- merge(Active_sellers,networkaragonTX,by="sellers")
+buyers_of_networkaragonTX <- unique(buyers_networkaragonTX$buyers)
+sellers_of_networkaragonTX <- unique(sellers_networkaragonTX$sellers)
+
+#importing other tokens as above
+```
+
+```{r echo=FALSE}
+networkbatTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkbatTX.txt", quote="\"", comment.char="")
+colnames(networkbatTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkbatTX <- merge(Active_buyers,networkbatTX,by="buyers")
+sellers_networkbatTX <- merge(Active_sellers,networkbatTX,by="sellers")
+buyers_of_networkbatTX <- unique(buyers_networkbatTX$buyers)
+sellers_of_networkbatTX <- unique(sellers_networkbatTX$sellers)
+
+networkbitqyTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkbitqyTX.txt", quote="\"", comment.char="")
+colnames(networkbitqyTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkbitqyTX <- merge(Active_buyers,networkbitqyTX,by="buyers")
+sellers_networkbitqyTX <- merge(Active_sellers,networkbitqyTX,by="sellers")
+buyers_of_networkbitqyTX <- unique(buyers_networkbitqyTX$buyers)
+sellers_of_networkbitqyTX <- unique(sellers_networkbitqyTX$sellers)
+
+networkbnbTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkbnbTX.txt", quote="\"", comment.char="")
+colnames(networkbnbTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkbnbTX <- merge(Active_buyers,networkbnbTX,by="buyers")
+sellers_networkbnbTX <- merge(Active_sellers,networkbnbTX,by="sellers")
+buyers_of_networkbnbTX <- unique(buyers_networkbnbTX$buyers)
+sellers_of_networkbnbTX <- unique(sellers_networkbnbTX$sellers)
+
+networkbytomTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkbytomTX.txt", quote="\"", comment.char="")
+colnames(networkbytomTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkbytomTX <- merge(Active_buyers,networkbytomTX,by="buyers")
+sellers_networkbytomTX <- merge(Active_sellers,networkbytomTX,by="sellers")
+buyers_of_networkbytomTX <- unique(buyers_networkbytomTX$buyers)
+sellers_of_networkbytomTX <- unique(sellers_networkbytomTX$sellers)
+
+networkcivicTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkcivicTX.txt", quote="\"", comment.char="")
+colnames(networkcivicTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkcivicTX <- merge(Active_buyers,networkcivicTX,by="buyers")
+sellers_networkcivicTX <- merge(Active_sellers,networkcivicTX,by="sellers")
+buyers_of_networkcivicTX <- unique(buyers_networkcivicTX$buyers)
+sellers_of_networkcivicTX <- unique(sellers_networkcivicTX$sellers)
+
+networkcybermilesTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkcybermilesTX.txt", quote="\"", comment.char="")
+colnames(networkcybermilesTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkcybermilesTX <- merge(Active_buyers,networkcybermilesTX,by="buyers")
+sellers_networkcybermilesTX <- merge(Active_sellers,networkcybermilesTX,by="sellers")
+buyers_of_networkcybermilesTX <- unique(buyers_networkcybermilesTX$buyers)
+sellers_of_networkcybermilesTX <- unique(sellers_networkcybermilesTX$sellers)
+
+networkdistrict0xTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkdistrict0xTX.txt", quote="\"", comment.char="")
+colnames(networkdistrict0xTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkdistrict0xTX <- merge(Active_buyers,networkdistrict0xTX,by="buyers")
+sellers_networkdistrict0xTX <- merge(Active_sellers,networkdistrict0xTX,by="sellers")
+buyers_of_networkdistrict0xTX <- unique(buyers_networkdistrict0xTX$buyers)
+sellers_of_networkdistrict0xTX <- unique(sellers_networkdistrict0xTX$sellers)
+
+networkeosTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkeosTX.txt", quote="\"", comment.char="")
+colnames(networkeosTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkeosTX <- merge(Active_buyers,networkeosTX,by="buyers")
+sellers_networkeosTX <- merge(Active_sellers,networkeosTX,by="sellers")
+buyers_of_networkeosTX <- unique(buyers_networkeosTX$buyers)
+sellers_of_networkeosTX <- unique(sellers_networkeosTX$sellers)
+
+networkfunfairTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkfunfairTX.txt", quote="\"", comment.char="")
+colnames(networkfunfairTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkfunfairTX <- merge(Active_buyers,networkfunfairTX,by="buyers")
+sellers_networkfunfairTX <- merge(Active_sellers,networkfunfairTX,by="sellers")
+buyers_of_networkfunfairTX <- unique(buyers_networkfunfairTX$buyers)
+sellers_of_networkfunfairTX <- unique(sellers_networkfunfairTX$sellers)
+
+networkgolemTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkgolemTX.txt", quote="\"", comment.char="")
+colnames(networkgolemTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkgolemTX <- merge(Active_buyers,networkgolemTX,by="buyers")
+sellers_networkgolemTX <- merge(Active_sellers,networkgolemTX,by="sellers")
+buyers_of_networkgolemTX <- unique(buyers_networkgolemTX$buyers)
+sellers_of_networkgolemTX <- unique(sellers_networkgolemTX$sellers)
+
+networkhmsTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkhmsTX.txt", quote="\"", comment.char="")
+colnames(networkhmsTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkhmsTX <- merge(Active_buyers,networkhmsTX,by="buyers")
+sellers_networkhmsTX <- merge(Active_sellers,networkhmsTX,by="sellers")
+buyers_of_networkhmsTX <- unique(buyers_networkhmsTX$buyers)
+sellers_of_networkhmsTX <- unique(sellers_networkhmsTX$sellers)
+
+networkiconTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkiconTX.txt", quote="\"", comment.char="")
+colnames(networkiconTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkiconTX <- merge(Active_buyers,networkiconTX,by="buyers")
+sellers_networkiconTX <- merge(Active_sellers,networkiconTX,by="sellers")
+buyers_of_networkiconTX <- unique(buyers_networkiconTX$buyers)
+sellers_of_networkiconTX <- unique(sellers_networkiconTX$sellers)
+
+networkinsurchainTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkinsurchainTX.txt", quote="\"", comment.char="")
+colnames(networkinsurchainTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkinsurchainTX <- merge(Active_buyers,networkinsurchainTX,by="buyers")
+sellers_networkinsurchainTX <- merge(Active_sellers,networkinsurchainTX,by="sellers")
+buyers_of_networkinsurchainTX <- unique(buyers_networkinsurchainTX$buyers)
+sellers_of_networkinsurchainTX <- unique(sellers_networkinsurchainTX$sellers)
+
+networkkybernetworkTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkkybernetworkTX.txt", quote="\"", comment.char="")
+colnames(networkkybernetworkTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkkybernetworkTX <- merge(Active_buyers,networkkybernetworkTX,by="buyers")
+sellers_networkkybernetworkTX <- merge(Active_sellers,networkkybernetworkTX,by="sellers")
+buyers_of_networkkybernetworkTX <- unique(buyers_networkkybernetworkTX$buyers)
+sellers_of_networkkybernetworkTX <- unique(sellers_networkkybernetworkTX$sellers)
+
+networklinoTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networklinoTX.txt", quote="\"", comment.char="")
+colnames(networklinoTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networklinoTX <- merge(Active_buyers,networklinoTX,by="buyers")
+sellers_networklinoTX <- merge(Active_sellers,networklinoTX,by="sellers")
+buyers_of_networklinoTX <- unique(buyers_networklinoTX$buyers)
+sellers_of_networklinoTX <- unique(sellers_networklinoTX$sellers)
+
+networkloopringTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkloopringTX.txt", quote="\"", comment.char="")
+colnames(networkloopringTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkloopringTX <- merge(Active_buyers,networkloopringTX,by="buyers")
+sellers_networkloopringTX <- merge(Active_sellers,networkloopringTX,by="sellers")
+buyers_of_networkloopringTX <- unique(buyers_networkloopringTX$buyers)
+sellers_of_networkloopringTX <- unique(sellers_networkloopringTX$sellers)
+
+networkomisegoTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkomisegoTX.txt", quote="\"", comment.char="")
+colnames(networkomisegoTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkomisegoTX <- merge(Active_buyers,networkomisegoTX,by="buyers")
+sellers_networkomisegoTX <- merge(Active_sellers,networkomisegoTX,by="sellers")
+buyers_of_networkomisegoTX <- unique(buyers_networkomisegoTX$buyers)
+sellers_of_networkomisegoTX <- unique(sellers_networkomisegoTX$sellers)
+
+networkpolyaiTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkpolyaiTX.txt", quote="\"", comment.char="")
+colnames(networkpolyaiTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkpolyaiTX <- merge(Active_buyers,networkpolyaiTX,by="buyers")
+sellers_networkpolyaiTX <- merge(Active_sellers,networkpolyaiTX,by="sellers")
+buyers_of_networkpolyaiTX <- unique(buyers_networkpolyaiTX$buyers)
+sellers_of_networkpolyaiTX <- unique(sellers_networkpolyaiTX$sellers)
+
+networkpowerledgerTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkpowerledgerTX.txt", quote="\"", comment.char="")
+colnames(networkpowerledgerTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkpowerledgerTX <- merge(Active_buyers,networkpowerledgerTX,by="buyers")
+sellers_networkpowerledgerTX <- merge(Active_sellers,networkpowerledgerTX,by="sellers")
+buyers_of_networkpowerledgerTX <- unique(buyers_networkpowerledgerTX$buyers)
+sellers_of_networkpowerledgerTX <- unique(sellers_networkpowerledgerTX$sellers)
+
+networkqtumTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkqtumTX.txt", quote="\"", comment.char="")
+colnames(networkqtumTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkqtumTX <- merge(Active_buyers,networkqtumTX,by="buyers")
+sellers_networkqtumTX <- merge(Active_sellers,networkqtumTX,by="sellers")
+buyers_of_networkqtumTX <- unique(buyers_networkqtumTX$buyers)
+sellers_of_networkqtumTX <- unique(sellers_networkqtumTX$sellers)
+
+networkrepTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkrepTX.txt", quote="\"", comment.char="")
+colnames(networkrepTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkrepTX <- merge(Active_buyers,networkrepTX,by="buyers")
+sellers_networkrepTX <- merge(Active_sellers,networkrepTX,by="sellers")
+buyers_of_networkrepTX <- unique(buyers_networkrepTX$buyers)
+sellers_of_networkrepTX <- unique(sellers_networkrepTX$sellers)
+
+networkreputationTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkreputationTX.txt", quote="\"", comment.char="")
+colnames(networkreputationTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkreputationTX <- merge(Active_buyers,networkreputationTX,by="buyers")
+sellers_networkreputationTX <- merge(Active_sellers,networkreputationTX,by="sellers")
+buyers_of_networkreputationTX <- unique(buyers_networkreputationTX$buyers)
+sellers_of_networkreputationTX <- unique(sellers_networkreputationTX$sellers)
+
+networkrequestTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkrequestTX.txt", quote="\"", comment.char="")
+colnames(networkrequestTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkrequestTX <- merge(Active_buyers,networkrequestTX,by="buyers")
+sellers_networkrequestTX <- merge(Active_sellers,networkrequestTX,by="sellers")
+buyers_of_networkrequestTX <- unique(buyers_networkrequestTX$buyers)
+sellers_of_networkrequestTX <- unique(sellers_networkrequestTX$sellers)
+
+networksaltTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networksaltTX.txt", quote="\"", comment.char="")
+colnames(networksaltTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networksaltTX <- merge(Active_buyers,networksaltTX,by="buyers")
+sellers_networksaltTX <- merge(Active_sellers,networksaltTX,by="sellers")
+buyers_of_networksaltTX <- unique(buyers_networksaltTX$buyers)
+sellers_of_networksaltTX <- unique(sellers_networksaltTX$sellers)
+
+networkstatusnetworkTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkstatusnetworkTX.txt", quote="\"", comment.char="")
+colnames(networkstatusnetworkTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkstatusnetworkTX <- merge(Active_buyers,networkstatusnetworkTX,by="buyers")
+sellers_networkstatusnetworkTX <- merge(Active_sellers,networkstatusnetworkTX,by="sellers")
+buyers_of_networkstatusnetworkTX <- unique(buyers_networkstatusnetworkTX$buyers)
+sellers_of_networkstatusnetworkTX <- unique(sellers_networkstatusnetworkTX$sellers)
+
+networkstorjTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkstorjTX.txt", quote="\"", comment.char="")
+colnames(networkstorjTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkstorjTX <- merge(Active_buyers,networkstorjTX,by="buyers")
+sellers_networkstorjTX <- merge(Active_sellers,networkstorjTX,by="sellers")
+buyers_of_networkstorjTX <- unique(buyers_networkstorjTX$buyers)
+sellers_of_networkstorjTX <- unique(sellers_networkstorjTX$sellers)
+
+networktenxpayTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networktenxpayTX.txt", quote="\"", comment.char="")
+colnames(networktenxpayTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networktenxpayTX <- merge(Active_buyers,networktenxpayTX,by="buyers")
+sellers_networktenxpayTX <- merge(Active_sellers,networktenxpayTX,by="sellers")
+buyers_of_networktenxpayTX <- unique(buyers_networktenxpayTX$buyers)
+sellers_of_networktenxpayTX <- unique(sellers_networktenxpayTX$sellers)
+
+networktestpogo1TX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networktestpogo1TX.txt", quote="\"", comment.char="")
+colnames(networktestpogo1TX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networktestpogo1TX <- merge(Active_buyers,networktestpogo1TX,by="buyers")
+sellers_networktestpogo1TX <- merge(Active_sellers,networktestpogo1TX,by="sellers")
+buyers_of_networktestpogo1TX <- unique(buyers_networktestpogo1TX$buyers)
+sellers_of_networktestpogo1TX <- unique(sellers_networktestpogo1TX$sellers)
+
+networktierionTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networktierionTX.txt", quote="\"", comment.char="")
+colnames(networktierionTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networktierionTX <- merge(Active_buyers,networktierionTX,by="buyers")
+sellers_networktierionTX <- merge(Active_sellers,networktierionTX,by="sellers")
+buyers_of_networktierionTX <- unique(buyers_networktierionTX$buyers)
+sellers_of_networktierionTX <- unique(sellers_networktierionTX$sellers)
+
+networktoken126TX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networktoken126TX.txt", quote="\"", comment.char="")
+colnames(networktoken126TX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networktoken126TX <- merge(Active_buyers,networktoken126TX,by="buyers")
+sellers_networktoken126TX <- merge(Active_sellers,networktoken126TX,by="sellers")
+buyers_of_networktoken126TX <- unique(buyers_networktoken126TX$buyers)
+sellers_of_networktoken126TX <- unique(sellers_networktoken126TX$sellers)
+
+networktronixTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networktronixTX.txt", quote="\"", comment.char="")
+colnames(networktronixTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networktronixTX <- merge(Active_buyers,networktronixTX,by="buyers")
+sellers_networktronixTX <- merge(Active_sellers,networktronixTX,by="sellers")
+buyers_of_networktronixTX <- unique(buyers_networktronixTX$buyers)
+sellers_of_networktronixTX <- unique(sellers_networktronixTX$sellers)
+
+networkvechainTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkvechainTX.txt", quote="\"", comment.char="")
+colnames(networkvechainTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkvechainTX <- merge(Active_buyers,networkvechainTX,by="buyers")
+sellers_networkvechainTX <- merge(Active_sellers,networkvechainTX,by="sellers")
+buyers_of_networkvechainTX <- unique(buyers_networkvechainTX$buyers)
+sellers_of_networkvechainTX <- unique(sellers_networkvechainTX$sellers)
+
+networkverosTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkverosTX.txt", quote="\"", comment.char="")
+colnames(networkverosTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkverosTX <- merge(Active_buyers,networkverosTX,by="buyers")
+sellers_networkverosTX <- merge(Active_sellers,networkverosTX,by="sellers")
+buyers_of_networkverosTX <- unique(buyers_networkverosTX$buyers)
+sellers_of_networkverosTX <- unique(sellers_networkverosTX$sellers)
+
+networkyocoinTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkyocoinTX.txt", quote="\"", comment.char="")
+colnames(networkyocoinTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkyocoinTX <- merge(Active_buyers,networkyocoinTX,by="buyers")
+sellers_networkyocoinTX <- merge(Active_sellers,networkyocoinTX,by="sellers")
+buyers_of_networkyocoinTX <- unique(buyers_networkyocoinTX$buyers)
+sellers_of_networkyocoinTX <- unique(sellers_networkyocoinTX$sellers)
+
+networkzrxTX <- read.table("F:/UTD/stats/Ethereum Dataset/Ethereum token graphs/networkzrxTX.txt", quote="\"", comment.char="")
+colnames(networkzrxTX) <-c("buyers","sellers","unixTime","tokenAmount")
+buyers_networkzrxTX <- merge(Active_buyers,networkzrxTX,by="buyers")
+sellers_networkzrxTX <- merge(Active_sellers,networkzrxTX,by="sellers")
+buyers_of_networkzrxTX <- unique(buyers_networkzrxTX$buyers)
+sellers_of_networkzrxTX <- unique(sellers_networkzrxTX$sellers)
+```
+
+####Creating table for total number of active buyers linked with different tokens
+```{r echo=FALSE}
+#Creating table for total number of active buyers linked with different tokens
+total_buyers <- as.data.table( c(buyers_of_networkzrxTX  ,buyers_of_networkyocoinTX ,buyers_of_networkverosTX ,buyers_of_networkvechainTX ,buyers_of_networktronixTX ,buyers_of_networktoken126TX ,buyers_of_networktierionTX ,buyers_of_networkaragonTX ,buyers_of_networkbatTX ,buyers_of_networkbitqyTX ,buyers_of_networkbnbTX ,buyers_of_networkbytomTX ,buyers_of_networkcivicTX ,buyers_of_networkcybermilesTX ,buyers_of_networkeosTX ,buyers_of_networkfunfairTX ,buyers_of_networkgolemTX ,buyers_of_networkhmsTX ,buyers_of_networkiconTX ,buyers_of_networkinsurchainTX ,buyers_of_networkkybernetworkTX ,buyers_of_networklinoTX ,buyers_of_networkloopringTX ,buyers_of_networkomisegoTX ,buyers_of_networkpolyaiTX ,buyers_of_networkpowerledgerTX ,buyers_of_networkrepTX ,buyers_of_networkreputationTX ,buyers_of_networkrequestTX ,buyers_of_networksaltTX ,buyers_of_networkstatusnetworkTX ,buyers_of_networkstorjTX ,buyers_of_networktenxpayTX ,buyers_of_networktestpogo1TX ,buyers_of_networkqtumTX , buyers_of_networkdistrict0xTX))
+
+colnames(total_buyers) <- c("buyer")
+table_of_buyers<- total_buyers[,.(rowCount= .N), by=buyer]
+buyer_count <- table_of_buyers[,.(rowCount= .N), by=rowCount]
+colnames(buyer_count) <- c("Number_of_token","Number_of_buyers")
+buyer_count <- buyer_count[order(buyer_count$Number_of_token),]
+buyer_count
+```
+####Creating table for total number of active sellers linked with different tokens 
+```{r echo=FALSE}
+total_sellers <- as.data.table(c(sellers_of_networkzrxTX  ,sellers_of_networkyocoinTX ,sellers_of_networkverosTX ,sellers_of_networkvechainTX ,sellers_of_networktronixTX ,sellers_of_networktoken126TX ,sellers_of_networktierionTX ,sellers_of_networkaragonTX ,sellers_of_networkbatTX ,sellers_of_networkbitqyTX ,sellers_of_networkbnbTX ,sellers_of_networkbytomTX ,sellers_of_networkcivicTX ,sellers_of_networkcybermilesTX ,sellers_of_networkeosTX ,sellers_of_networkfunfairTX ,sellers_of_networkgolemTX ,sellers_of_networkhmsTX ,sellers_of_networkiconTX ,sellers_of_networkinsurchainTX ,sellers_of_networkkybernetworkTX ,sellers_of_networklinoTX ,sellers_of_networkloopringTX ,sellers_of_networkomisegoTX ,sellers_of_networkpolyaiTX ,sellers_of_networkpowerledgerTX ,sellers_of_networkrepTX ,sellers_of_networkreputationTX ,sellers_of_networkrequestTX ,sellers_of_networksaltTX ,sellers_of_networkstatusnetworkTX ,sellers_of_networkstorjTX ,sellers_of_networktenxpayTX ,sellers_of_networktestpogo1TX ,sellers_of_networkqtumTX , sellers_of_networkdistrict0xTX))
+
+colnames(total_sellers) <- c("seller")
+table_of_sellers<- total_sellers[,.(rowCount= .N), by=seller]
+seller_count <- table_of_sellers[,.(rowCount= .N), by=rowCount]
+colnames(seller_count) <- c("Number_of_token","Number_of_sellers")
+seller_count <- seller_count[order(seller_count$Number_of_token),]
+seller_count
+
+```
+### Distribution Fitting for active buyers
+```{r}
+barplot(buyer_count$Number_of_buyers,names.arg =buyer_count$Number_of_token ,ylab = "Number_of_buyers", xlab = "Number_of_token",ylim = c(0,200))
+
+poisfit  <-  fitdist(buyer_count$Number_of_buyers, "pois")
+gammafit <- fitdist(buyer_count$Number_of_buyers, "gamma", method = "mle", lower = c(0, 0), start = list(scale = 1, shape = 1))
+weibullfit  <-  fitdist(buyer_count$Number_of_buyers, "weibull")
+
+qqcomp(list(poisfit, gammafit, weibullfit),
+       legendtext=c("pois", "gamma", "weibull") )
+
+gammafit
+plot(gammafit)
+```
+
+### Distribution Fitting for active sellers
+```{r}
+barplot(seller_count$Number_of_sellers,names.arg =seller_count$Number_of_token ,ylab = "Number_of_sellers", xlab = "Number_of_token",ylim = c(0,200))
+
+poisfit  <-  fitdist(seller_count$Number_of_sellers, "pois")
+gammafit <- fitdist(seller_count$Number_of_sellers, "gamma", method = "mle", lower = c(0, 0), start = list(scale = 1, shape = 1))
+weibullfit  <-  fitdist(seller_count$Number_of_sellers, "weibull")
+
+qqcomp(list(poisfit, gammafit, weibullfit),
+       legendtext=c("pois", "gamma", "weibull") )
+
+weibullfit
+plot(weibullfit)
+```
+
+#### After plotting and observing different distributions of discrete data for active user and their activity in other tokens, we have come to a conclusion that the weibull distribution fits best with the number of active users for both seller and buyers.
+
+
+#Conclusion
+After completing this project, we learned more about Ethereum tokens and what token transactions look like. More importantly, we practiced to find and analyze relations from the data that was given to us. By making assumption first and fitting different distributions to our data, we finally concluded that our token MCAP has a gamma distribution. By creating layers using dates, we found that our correlation for each layer is not great. By tracking our most active users in all of the other tokens, we found that the weibull distribution fits the best.
+
+"All in all we can sum up that our token mcap's Transaction were mostly infulenced by top active buyers and sellers".
+
+
+#Project 2#
+```{r}
+# Creating table with columns tokenamount and unixtime
+table_of_transaction <- subset(networkmcapT ,select=c(unixTime,tokenAmount))
+# Creating table with token daily closing price and date
+dates <- mcap$Date
+Date <- as.Date(dates, format = "%m/%d/%Y")
+Date <- format(Date,"%Y-%m-%d")
+Date <- as.Date(Date)
+tablePrice <- data.table(Date,mcap$Close)
+colnames(tablePrice) <-c("Date","Closing Price")
+
+
+# Maping number of transaction with date
+date <- as.Date(as.POSIXct(table_of_transaction$unixTime , origin="1970-01-01"))
+amount <- as.vector(table_of_transaction$tokenAmount)
+data <- data.frame(date,amount)
+p <- data.table(from=c(data$amount),Date=c(data$date))
+table_of_date<- p[,.(rowCount= .N), by=Date]
+colnames(table_of_date) <-c("Date","Num of transaction")
+
+
+#calculating percent change in closing price
+table_Price <- data.table(Date,mcap$Close)
+n <- nrow(table_Price)
+a <- mcap$Close[ 2 : n ]
+b <- mcap$Close[ 1 : (n - 1)]
+percent_change <- (a - b) * 100 / b
+percent_change[n] <- mean(percent_change)
+
+table_Price <- data.table(Date,mcap$Close,percent_change)
+new_table <- merge(table_Price,table_of_date,by="Date")
+colnames(new_table) <- c("Date","close","percent_change","Num of transaction")
+
+#Creating Multiple linear regression model for each layer using features like number of transaction and percentage change in closing price
+
+# summary for first five layers
+p <- 1
+for (x in 0:4){
+    layer <- subset(new_table,
+                    new_table$Date >
+                      new_table$Date[p] 
+                    & new_table$Date <=
+                      new_table$Date[p + 5])
+    p <- p + 5
+fit <- lm(layer$close ~ layer$`Num of transaction` + 
+           layer$percent_change , data=layer)
+print(summary(fit))
+}
+
+# Creating Multiple linear regression model for remaining layers
+for (x in 5:34){
+    layer <- subset(new_table,
+                    new_table$Date >
+                      new_table$Date[p] 
+                    & new_table$Date <=
+                      new_table$Date[p + 5])
+    p <- p + 5
+fit <- lm(layer$close ~ layer$`Num of transaction` + 
+           layer$percent_change , data=layer)
+summary(fit)
+}
+```
+
+##conclusion##
+
+We are using layers that we have created during Project 1 to create the Multiple linear regression model.
+Reason for using layers is our token MCAP's correlation is very low while for some of the layers correlation is around 0.6 which can help to create proper Multiple linear regression model.  
+
+The features that we have used are "Number of transaction" for perticular Date from blockchain data and the "precentage change in closing price" from price data.
+
+Average Multiple R-squared value for the layers is aroubd 0.65 &
+Average Adjusted R-squared value for the layers is aroubd 0.57
+We are getting better R-squared value for layers which has higher correlation.
+
+We have also tried features from price data like "Market.cap" & "change in higher and lower price" of token on perticular day but we ended up with overfitting issue as R-squared was around 0.99 and while we used data from blockchain data R-squared value was too low.
+
+
+ 
